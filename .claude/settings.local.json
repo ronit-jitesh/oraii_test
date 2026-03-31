@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
+      "Bash(jobs -l)",
+      "Bash(npm run:*)",
+      "Bash(pkill -f \"next dev\")",
+      "Bash(kill -9 66450)",
+      "Bash(pkill -9 -f \"next\")",
+      "Bash(npm install:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/patient/mind-os)",
+      "Bash(open http://localhost:3000/patient/mind-os)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(xargs kill:*)"
+    ]
+  }
+}

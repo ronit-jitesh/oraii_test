@@ -1,0 +1,119 @@
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+:root {
+  --color-bg: #F7F5F0;
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #F0EDE6;
+  --color-border: #E2DDD5;
+
+  --color-primary: #2D6A4F;
+  --color-primary-hover: #1B4D38;
+  --color-primary-light: #D8EDDF;
+
+  --color-accent: #52B788;
+  --color-accent-warm: #B7935A;
+
+  --color-text: #1A1A1A;
+  --color-text-muted: #6B7280;
+  --color-text-inverse: #FFFFFF;
+
+  --color-success: #40916C;
+  --color-warning: #D4A017;
+  --color-error: #C0392B;
+
+  --font-display: 'Lora', 'Georgia', serif;
+  --font-body: 'Inter', 'DM Sans', sans-serif;
+
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-full: 9999px;
+
+  --shadow-card: 0 2px 12px rgba(45, 106, 79, 0.08);
+  --shadow-hover: 0 6px 24px rgba(45, 106, 79, 0.14);
+}
+
+@theme inline {
+  --color-background: var(--color-bg);
+  --color-foreground: var(--color-text);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
+
+  --color-brand-bg: #F7F5F0;
+  --color-brand-surface: #FFFFFF;
+  --color-brand-surface-alt: #F0EDE6;
+  --color-brand-border: #E2DDD5;
+  --color-brand-primary: #2D6A4F;
+  --color-brand-primary-hover: #1B4D38;
+  --color-brand-primary-light: #D8EDDF;
+  --color-brand-accent: #52B788;
+  --color-brand-accent-warm: #B7935A;
+  --color-brand-text: #1A1A1A;
+  --color-brand-muted: #6B7280;
+  --color-brand-success: #40916C;
+
+  --shadow-card: 0 2px 12px rgba(45, 106, 79, 0.08);
+  --shadow-hover: 0 6px 24px rgba(45, 106, 79, 0.14);
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Global Input Styles ── */
+input,
+textarea,
+select {
+  background-color: var(--color-surface) !important;
+  border: 1.5px solid var(--color-border) !important;
+  color: var(--color-text) !important;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-text-muted) !important;
+  font-weight: 400;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none !important;
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 3px rgba(45, 106, 79, 0.12) !important;
+}
+
+/* ── Smooth Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #C9C3B8;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #A39E94;
+}
+
+/* ── Selection ── */
+::selection {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}

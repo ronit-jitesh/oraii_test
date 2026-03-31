@@ -1,0 +1,9 @@
+PASS | chirp_2 + auto => OK (no error in 5s)
+PASS | chirp_2 + en-US => OK (no error in 5s)
+PASS | chirp_2 + hi-IN => OK (no error in 5s)
+FAIL | chirp_2 + [hi-IN, en-US] => ERROR: 3 INVALID_ARGUMENT: Invalid arguments were provided.
+PASS | chirp_2 + kn-IN => OK (no error in 5s)
+FAIL | latest_long + hi-IN => ERROR: 3 INVALID_ARGUMENT: The language "hi-IN" is not supported by the model "latest_long" in the location named "us-central1".
+FAIL | latest_long + kn-IN => ERROR: 3 INVALID_ARGUMENT: The language "kn-IN" is not supported by the model "latest_long" in the location named "us-central1".
+FAIL | chirp + auto => ERROR: 1 CANCELLED: The operation was cancelled.
+PASS | chirp_2 + autoDecoding + en-US => OK (no error in 5s)

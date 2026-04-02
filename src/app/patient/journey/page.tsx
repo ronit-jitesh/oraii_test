@@ -162,8 +162,8 @@ export default function JourneyPage() {
                                         borderRadius: 12,
                                         fontSize: 12,
                                     }}
-                                    formatter={(value: any, name: string) => [value, 'Score']}
-                                    labelFormatter={(label: string) => `Date: ${label}`}
+                                    formatter={(value: any) => [value, 'Score']}
+                                    labelFormatter={(label: any) => `Date: ${label}`}
                                 />
                                 <Line type="monotone" dataKey="score" stroke="#7C3AED" strokeWidth={2} dot={{ r: 4, fill: '#7C3AED' }} />
                             </LineChart>

@@ -849,7 +849,7 @@ export async function saveAssessment(data: {
     try {
         // Validate instrument-specific item count
         const ITEM_COUNTS: Record<InstrumentType, number> = {
-            'PHQ-9': 9, 'GAD-7': 7, 'DASS-21': 21, 'CORE-10': 10, 'ORS': 4, 'SRS': 4,
+            'PHQ-9': 9, 'GAD-7': 7, 'DASS-21': 21, 'CORE-10': 10, 'ORS': 4, 'SRS': 4, 'PSS-10': 10, 'UCLA-3': 3,
         };
         const expectedItems = ITEM_COUNTS[data.instrument] || 0;
         if (data.itemScores.length !== expectedItems) {
@@ -858,7 +858,7 @@ export async function saveAssessment(data: {
 
         // Validate max item scores per instrument
         const MAX_ITEM: Record<InstrumentType, number> = {
-            'PHQ-9': 3, 'GAD-7': 3, 'DASS-21': 3, 'CORE-10': 4, 'ORS': 10, 'SRS': 10,
+            'PHQ-9': 3, 'GAD-7': 3, 'DASS-21': 3, 'CORE-10': 4, 'ORS': 10, 'SRS': 10, 'PSS-10': 4, 'UCLA-3': 3,
         };
         const maxItem = MAX_ITEM[data.instrument] || 3;
         if (data.itemScores.some(s => s < 0 || s > maxItem)) {

@@ -1,16 +1,28 @@
 // MindOS — Brainwave Gamification Page
 // ORAII Patient Portal: /patient/mind-os
-// Stack: Next.js 16, Tailwind, Framer Motion
-// v2: Audio engine + corrected XP system
+// v3 — BUG FIXES:
+//   1. Check-in state persisted via DailyState (resets at LOCAL midnight, not page reload)
+//   2. Journal now actually calls saveJournalEntry() — previously only awarded XP
+//   3. XP state update now always fires (removed broken p.added guard)
+//   4. Daily reset uses local timezone, not UTC
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import SessionModal from "@/components/mindos/SessionModal";
 import ConsistencyEngine from "@/components/mindos/ConsistencyEngine";
-import { loadProgress, addXP, MindOSProgress } from "@/lib/mindos-data";
+import {
+  loadProgress,
+  addXP,
+  loadDailyState,
+  saveDailyState,
+  saveJournalEntry,
+  saveDraft,
+  loadDraft,
+  clearDraft,
+} from "@/lib/mindos-data";
 
 // ─── DATA ───────────────────────────────────────────────────────────────────
 
@@ -214,16 +226,10 @@ function BrainOrb({ wave, size = 120, animate = true, onClick }: { wave: string;
     beta: ["#78350f", "#b45309", "#d97706"],
     gamma: ["#831843", "#be185d", "#ec4899"],
   };
-
   const c = colors[wave] || colors.alpha;
 
   return (
-    <div
-      onClick={onClick}
-      className="relative cursor-pointer"
-      style={{ width: size, height: size }}
-    >
-      {/* Outer pulse ring */}
+    <div onClick={onClick} className="relative cursor-pointer" style={{ width: size, height: size }}>
       {animate && (
         <motion.div
           className="absolute inset-0 rounded-full"
@@ -232,7 +238,6 @@ function BrainOrb({ wave, size = 120, animate = true, onClick }: { wave: string;
           transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
         />
       )}
-      {/* Mid ring */}
       {animate && (
         <motion.div
           className="absolute inset-2 rounded-full"
@@ -241,7 +246,6 @@ function BrainOrb({ wave, size = 120, animate = true, onClick }: { wave: string;
           transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut", delay: 0.4 }}
         />
       )}
-      {/* Core orb */}
       <motion.div
         className="absolute inset-4 rounded-full flex items-center justify-center"
         style={{ background: `radial-gradient(circle at 35% 35%, ${c[2]}, ${c[0]})` }}
@@ -252,21 +256,10 @@ function BrainOrb({ wave, size = 120, animate = true, onClick }: { wave: string;
           {WAVES.find((w) => w.id === wave)?.name}
         </div>
       </motion.div>
-      {/* Wave lines overlay */}
-      <svg
-        className="absolute inset-0 w-full h-full"
-        viewBox="0 0 120 120"
-        style={{ opacity: 0.4 }}
-      >
+      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 120 120" style={{ opacity: 0.4 }}>
         {[20, 30, 40].map((r, i) => (
           <motion.circle
-            key={i}
-            cx="60"
-            cy="60"
-            r={r}
-            fill="none"
-            stroke="white"
-            strokeWidth="0.5"
+            key={i} cx="60" cy="60" r={r} fill="none" stroke="white" strokeWidth="0.5"
             animate={{ opacity: [0.6, 0.2, 0.6] }}
             transition={{ duration: 2 + i * 0.5, repeat: Infinity, delay: i * 0.3 }}
           />
@@ -317,10 +310,7 @@ function StreakBadge({ streak }: { streak: number }) {
       style={{ background: "#fef3c7", color: "#b45309" }}
       whileHover={{ scale: 1.05 }}
     >
-      <motion.span
-        animate={{ scale: [1, 1.2, 1] }}
-        transition={{ duration: 1.5, repeat: Infinity }}
-      >
+      <motion.span animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 1.5, repeat: Infinity }}>
         🔥
       </motion.span>
       {streak} day streak
@@ -332,7 +322,6 @@ function StreakBadge({ streak }: { streak: number }) {
 
 function SessionCard({ session, onStart }: { session: Session; onStart: (s: Session) => void }) {
   const wave = WAVES.find((w) => w.id === session.wave) || WAVES[2];
-
   return (
     <motion.div
       whileHover={session.locked ? {} : { y: -3, scale: 1.01 }}
@@ -356,10 +345,7 @@ function SessionCard({ session, onStart }: { session: Session; onStart: (s: Sess
         </div>
       )}
       <div className="flex items-start justify-between mb-2">
-        <div
-          className="text-xs font-semibold px-2 py-0.5 rounded-full"
-          style={{ background: wave.color + "20", color: wave.color }}
-        >
+        <div className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: wave.color + "20", color: wave.color }}>
           {session.type}
         </div>
         <div className="flex items-center gap-1 text-xs font-bold" style={{ color: wave.color }}>
@@ -370,10 +356,7 @@ function SessionCard({ session, onStart }: { session: Session; onStart: (s: Sess
       <div className="text-xs text-gray-500 mb-3 leading-relaxed">{session.desc}</div>
       <div className="flex items-center justify-between">
         <span className="text-xs text-gray-400">⏱ {session.duration}</span>
-        <div
-          className="text-xs font-semibold px-3 py-1 rounded-full"
-          style={{ background: wave.color, color: "white" }}
-        >
+        <div className="text-xs font-semibold px-3 py-1 rounded-full" style={{ background: wave.color, color: "white" }}>
           Start →
         </div>
       </div>
@@ -381,21 +364,42 @@ function SessionCard({ session, onStart }: { session: Session; onStart: (s: Sess
   );
 }
 
-// ─── OLD SESSION MODAL REMOVED — now using /components/mindos/SessionModal ──
+// ─── JOURNAL PANEL (inline on Today tab) ─────────────────────────────────
+// BUG FIX 3: Now calls saveJournalEntry() from persistence layer.
+// Previously this only called onSave (which just awarded XP) — nothing was saved.
 
-
-// ─── JOURNAL PANEL ────────────────────────────────────────────────────────
-
-function JournalPanel({ onSave }: { onSave: (text: string) => void }) {
+function JournalPanel({ onSave }: { onSave: (text: string) => Promise<void> }) {
   const [text, setText] = useState("");
   const [prompt, setPrompt] = useState(JOURNAL_PROMPTS[Math.floor(Math.random() * JOURNAL_PROMPTS.length)]);
-  const [saved, setSaved] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleSave = () => {
-    if (!text.trim()) return;
-    setSaved(true);
-    onSave(text);
-    setTimeout(() => setSaved(false), 2000);
+  // Restore draft on mount
+  useEffect(() => {
+    const draft = loadDraft();
+    if (draft) setText(draft);
+  }, []);
+
+  // Auto-save draft as user types
+  useEffect(() => {
+    if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
+    autoSaveRef.current = setTimeout(() => saveDraft(text), 800);
+    return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current); };
+  }, [text]);
+
+  const handleSave = async () => {
+    if (!text.trim() || saveState === "saving") return;
+    setSaveState("saving");
+    try {
+      await onSave(text);
+      clearDraft();
+      setText("");
+      setSaveState("saved");
+      setTimeout(() => setSaveState("idle"), 2500);
+    } catch {
+      setSaveState("error");
+      setTimeout(() => setSaveState("idle"), 2000);
+    }
   };
 
   return (
@@ -407,13 +411,18 @@ function JournalPanel({ onSave }: { onSave: (text: string) => void }) {
           <div className="text-xs text-purple-600 italic">&quot;{prompt}&quot;</div>
         </div>
       </div>
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Write freely. No rules. Your subconscious is talking..."
-        className="w-full h-28 p-3 text-sm rounded-xl border border-gray-100 resize-none focus:outline-none focus:ring-2 focus:ring-purple-200"
-        style={{ background: "#fafaf9" }}
-      />
+      <div className="relative">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Write freely. No rules. Your subconscious is talking..."
+          className="w-full h-28 p-3 text-sm rounded-xl border border-gray-100 resize-none focus:outline-none focus:ring-2 focus:ring-purple-200"
+          style={{ background: "#fafaf9", fontFamily: "inherit" }}
+        />
+        {text.length > 10 && (
+          <div className="absolute bottom-2 right-3 text-xs text-gray-300">draft saved</div>
+        )}
+      </div>
       <div className="flex items-center gap-2">
         <button
           onClick={() => setPrompt(JOURNAL_PROMPTS[Math.floor(Math.random() * JOURNAL_PROMPTS.length)])}
@@ -425,10 +434,18 @@ function JournalPanel({ onSave }: { onSave: (text: string) => void }) {
         <motion.button
           whileTap={{ scale: 0.95 }}
           onClick={handleSave}
-          className="px-4 py-2 rounded-xl text-xs font-semibold text-white"
-          style={{ background: saved ? "#2D6A4F" : "#5b21b6" }}
+          disabled={!text.trim() || saveState === "saving"}
+          className="px-4 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+          style={{
+            background: saveState === "saved" ? "#2D6A4F"
+              : saveState === "error" ? "#be185d"
+              : "#5b21b6",
+          }}
         >
-          {saved ? "✓ Saved! +15 XP" : "Save entry →"}
+          {saveState === "saving" ? "Saving..." :
+           saveState === "saved" ? "✓ Saved! +15 XP" :
+           saveState === "error" ? "Failed — try again" :
+           "Save entry →"}
         </motion.button>
       </div>
     </div>
@@ -457,11 +474,7 @@ function CheckInPanel({ onComplete }: { onComplete: (answers: Record<string, str
     <div className="space-y-4">
       <div className="flex gap-1 mb-2">
         {CHECKIN_QUESTIONS.map((_, i) => (
-          <div
-            key={i}
-            className="flex-1 h-1 rounded-full"
-            style={{ background: i <= step ? "#5b21b6" : "#e5e7eb" }}
-          />
+          <div key={i} className="flex-1 h-1 rounded-full" style={{ background: i <= step ? "#5b21b6" : "#e5e7eb" }} />
         ))}
       </div>
       <AnimatePresence mode="wait">
@@ -497,23 +510,31 @@ export default function MindOSPage() {
   const [xp, setXP] = useState(0);
   const [streak, setStreak] = useState(0);
   const [activeSession, setActiveSession] = useState<Session | null>(null);
+  const [selectedWave, setSelectedWave] = useState("alpha");
+  const [notification, setNotification] = useState<string | null>(null);
+  const [dailyXP, setDailyXP] = useState(0);
+  const [loadingProgress, setLoadingProgress] = useState(true);
+
+  // BUG FIX 1: daily state persisted — survives refresh, resets at local midnight
   const [checkedIn, setCheckedIn] = useState(false);
   const [checkinAnswers, setCheckinAnswers] = useState<Record<string, string> | null>(null);
   const [journalDone, setJournalDone] = useState(false);
-  const [selectedWave, setSelectedWave] = useState("alpha");
-  const [notification, setNotification] = useState<string | null>(null);
-  const [coins, setCoins] = useState(0);
-  const [dailyXP, setDailyXP] = useState(0); // tracks XP earned today for daily cap
-  const [loadingProgress, setLoadingProgress] = useState(true);
 
+  // Load XP + daily state on mount
   useEffect(() => {
-    loadProgress().then((p: MindOSProgress) => {
+    // Load XP/streak from persistence
+    loadProgress().then((p) => {
       setXP(p.xp);
       setStreak(p.streak);
-      setCoins(p.xp); // Synced with XP for now
       setDailyXP(p.daily_xp_today);
       setLoadingProgress(false);
     });
+
+    // BUG FIX 1: Load daily state (resets if new local day)
+    const daily = loadDailyState();
+    setCheckedIn(daily.checkedIn);
+    setCheckinAnswers(daily.checkinAnswers);
+    setJournalDone(daily.journalDone);
   }, []);
 
   const currentLevel = LEVELS.filter((l) => l.minXP <= xp).pop();
@@ -523,42 +544,54 @@ export default function MindOSPage() {
     setTimeout(() => setNotification(null), 3000);
   };
 
+  // BUG FIX 2: XP update no longer gated on p.added being truthy
+  // We always update local UI state with the returned values
+  const applyXPResult = (p: Awaited<ReturnType<typeof addXP>>) => {
+    setXP(p.xp);
+    setStreak(p.streak);
+    setDailyXP(p.daily_xp_today);
+  };
+
   const handleCheckinComplete = async (answers: Record<string, string>) => {
+    // BUG FIX 1: persist check-in state so it survives refresh
     setCheckedIn(true);
     setCheckinAnswers(answers);
+    saveDailyState({ checkedIn: true, checkinAnswers: answers });
+
     const p = await addXP(10);
-    if (p.added) {
-      setXP(p.xp);
-      setStreak(p.streak);
-      setCoins(p.xp);
-      setDailyXP(p.daily_xp_today);
-    }
-    showNotif("+10 XP — Brain check-in complete! 🧠");
+    applyXPResult(p);
+    showNotif(p.added > 0 ? "+10 XP — Brain check-in complete! 🧠" : "Daily XP cap reached 🧠");
   };
 
   const handleSessionComplete = async (xpEarned: number) => {
     const s = activeSession;
     if (!s) return;
     const p = await addXP(xpEarned);
-    if (p.added) {
-      setXP(p.xp);
-      setStreak(p.streak);
-      setCoins(p.xp);
-      setDailyXP(p.daily_xp_today);
-    }
+    applyXPResult(p);
     setActiveSession(null);
     showNotif(`+${p.added} XP — "${s.title}" complete! ✨`);
   };
 
-  const handleJournalSave = async () => {
-    setJournalDone(true);
+  // BUG FIX 3: Journal now saves to persistence, not just awards XP
+  const handleJournalSave = async (text: string) => {
+    const result = await saveJournalEntry({
+      content: text,
+      prompt: undefined,
+      wave: "alpha",
+      moodState: checkinAnswers?.state || null,
+    });
+
+    if (!result.ok) throw new Error(result.error || "Save failed");
+
+    // Award XP
     const p = await addXP(15);
-    if (p.added) {
-      setXP(p.xp);
-      setStreak(p.streak);
-      setCoins(p.xp);
-      setDailyXP(p.daily_xp_today);
-    }
+    applyXPResult(p);
+
+    // Mark journal done for today (persists across refreshes)
+    setJournalDone(true);
+    saveDailyState({ journalDone: true });
+
+    showNotif(p.added > 0 ? `+${p.added} XP — Journal saved! 📓` : "Journal saved! 📓");
   };
 
   const tabs = [
@@ -587,7 +620,7 @@ export default function MindOSPage() {
         )}
       </AnimatePresence>
 
-      {/* Session modal — v2 with audio engine */}
+      {/* Session modal */}
       <AnimatePresence>
         {activeSession && (
           <SessionModal
@@ -610,12 +643,10 @@ export default function MindOSPage() {
             <div className="flex items-center gap-3">
               <StreakBadge streak={streak} />
               <div className="flex items-center gap-1 px-3 py-1 rounded-full text-sm font-semibold" style={{ background: "#ede9fe", color: "#5b21b6" }}>
-                <span>⚡</span> {coins}
+                <span>⚡</span> {xp}
               </div>
             </div>
           </div>
-
-          {/* XP Bar */}
           <XPBar xp={xp} />
         </div>
       </div>
@@ -649,14 +680,9 @@ export default function MindOSPage() {
 
           {/* ── TODAY TAB ── */}
           {tab === "today" && (
-            <motion.div
-              key="today"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="space-y-4"
-            >
-              {/* Daily orb */}
+            <motion.div key="today" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
+
+              {/* Brain orb hero */}
               <div className="rounded-3xl p-6 text-center" style={{ background: "linear-gradient(135deg, #1a1a2e 0%, #2d1b69 100%)" }}>
                 <div className="flex justify-center mb-3">
                   <BrainOrb wave={selectedWave} size={140} animate />
@@ -672,9 +698,10 @@ export default function MindOSPage() {
                 </div>
               </div>
 
-              {/* Daily checklist */}
+              {/* Daily checklist — shows real persisted state, NOT re-fillable */}
               <div className="rounded-2xl bg-white p-4 border border-gray-100">
-                <div className="text-sm font-bold text-gray-800 mb-3">Today&apos;s brain practice</div>
+                <div className="text-sm font-bold text-gray-800 mb-1">Today&apos;s brain practice</div>
+                <div className="text-xs text-gray-400 mb-3">Resets at midnight · {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</div>
                 <div className="space-y-2">
                   {[
                     { label: "Brain check-in", xp: 10, done: checkedIn, emoji: "🧠" },
@@ -697,28 +724,26 @@ export default function MindOSPage() {
                         )}
                       </div>
                       <div className="text-xs font-bold" style={{ color: item.done ? "#2D6A4F" : "#9ca3af" }}>
-                        +{item.xp} XP
+                        {item.done ? "done" : `+${item.xp} XP`}
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Consistency Gamification Engine */}
+              {/* Consistency engine */}
               {!loadingProgress && (
-                <div className="mb-4">
-                  <ConsistencyEngine
-                    streak={streak}
-                    currentDay={1} // Temporary placeholder for 21-day sprint logic
-                    completedDays={[]} 
-                    daysMissed={0} 
-                    freezesLeft={3}
-                    onMicroComplete={() => handleSessionComplete(10)}
-                  />
-                </div>
+                <ConsistencyEngine
+                  streak={streak}
+                  currentDay={1}
+                  completedDays={[]}
+                  daysMissed={0}
+                  freezesLeft={3}
+                  onMicroComplete={() => handleSessionComplete(10)}
+                />
               )}
 
-              {/* Check-in or recommendation */}
+              {/* Check-in or AI recommendation */}
               {!checkedIn ? (
                 <div className="rounded-2xl bg-white p-4 border border-gray-100">
                   <div className="text-sm font-bold text-gray-800 mb-3">Daily brain check-in</div>
@@ -744,13 +769,7 @@ export default function MindOSPage() {
 
           {/* ── SESSIONS TAB ── */}
           {tab === "sessions" && (
-            <motion.div
-              key="sessions"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="space-y-3"
-            >
+            <motion.div key="sessions" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-3">
               <div className="text-xs text-gray-400 pt-2">All brain sessions — unlock more as you level up</div>
               {SESSIONS.map((s) => (
                 <SessionCard key={s.id} session={s} onStart={setActiveSession} />
@@ -760,13 +779,7 @@ export default function MindOSPage() {
 
           {/* ── WAVES TAB ── */}
           {tab === "waves" && (
-            <motion.div
-              key="waves"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="space-y-4"
-            >
+            <motion.div key="waves" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
               <div className="text-xs text-gray-400 pt-2">Tap a wave to learn and practice</div>
               {WAVES.map((wave) => {
                 const isLocked = wave.locked && xp < wave.xp;
@@ -790,10 +803,7 @@ export default function MindOSPage() {
                           <div className="text-xs font-mono text-gray-400">{wave.hz}</div>
                           {isLocked && <span className="text-xs">🔒</span>}
                         </div>
-                        <div
-                          className="text-xs font-semibold mb-1 px-2 py-0.5 rounded-full inline-block"
-                          style={{ background: wave.color + "20", color: wave.color }}
-                        >
+                        <div className="text-xs font-semibold mb-1 px-2 py-0.5 rounded-full inline-block" style={{ background: wave.color + "20", color: wave.color }}>
                           {wave.tag}
                         </div>
                         <div className="text-xs text-gray-500 leading-relaxed">{wave.desc}</div>
@@ -810,13 +820,7 @@ export default function MindOSPage() {
 
           {/* ── JOURNAL TAB ── */}
           {tab === "journal" && (
-            <motion.div
-              key="journal"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="space-y-4 pt-2"
-            >
+            <motion.div key="journal" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4 pt-2">
               <div className="rounded-2xl bg-white p-4 border border-gray-100">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="text-lg">📓</span>
@@ -841,26 +845,25 @@ export default function MindOSPage() {
               <div className="rounded-2xl bg-white p-4 border border-gray-100">
                 <div className="text-sm font-bold text-gray-800 mb-3">Past entries</div>
                 {journalDone ? (
-                  <div className="text-xs text-gray-500 p-3 rounded-xl bg-gray-50">
-                    Today&apos;s entry saved ✓
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50">
+                    <span className="text-green-600">✓</span>
+                    <div className="text-xs text-green-700 font-medium">Today&apos;s entry saved</div>
                   </div>
                 ) : (
                   <div className="text-xs text-gray-400">No entries yet. Complete your first journal above.</div>
                 )}
+                <div className="mt-3">
+                  <Link href="/patient/mind-os/journal" className="text-xs text-purple-600 hover:text-purple-800 underline">
+                    View all past entries →
+                  </Link>
+                </div>
               </div>
             </motion.div>
           )}
 
           {/* ── PROGRESS TAB ── */}
           {tab === "progress" && (
-            <motion.div
-              key="progress"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="space-y-4 pt-2"
-            >
-              {/* Level ladder */}
+            <motion.div key="progress" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4 pt-2">
               <div className="rounded-2xl bg-white p-4 border border-gray-100">
                 <div className="text-sm font-bold text-gray-800 mb-4">Brain level progression</div>
                 <div className="space-y-3">
@@ -871,26 +874,17 @@ export default function MindOSPage() {
                       <div key={level.id} className="flex items-center gap-3">
                         <div
                           className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                          style={{
-                            background: isReached ? level.color : "#f3f4f6",
-                            color: isReached ? "white" : "#9ca3af",
-                          }}
+                          style={{ background: isReached ? level.color : "#f3f4f6", color: isReached ? "white" : "#9ca3af" }}
                         >
                           {isReached ? "✓" : level.id}
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <span
-                              className="text-sm font-semibold"
-                              style={{ color: isReached ? level.color : "#d1d5db" }}
-                            >
+                            <span className="text-sm font-semibold" style={{ color: isReached ? level.color : "#d1d5db" }}>
                               {level.name}
                             </span>
                             {isCurrent && (
-                              <span
-                                className="text-xs px-2 py-0.5 rounded-full font-semibold"
-                                style={{ background: level.color + "20", color: level.color }}
-                              >
+                              <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: level.color + "20", color: level.color }}>
                                 current
                               </span>
                             )}
@@ -903,18 +897,13 @@ export default function MindOSPage() {
                 </div>
               </div>
 
-              {/* Stats grid */}
               <div className="grid grid-cols-3 gap-3">
                 {[
                   { label: "Total XP", value: xp, icon: "⚡" },
                   { label: "Streak", value: `${streak}d`, icon: "🔥" },
-                  { label: "Sessions", value: 12, icon: "🎧" },
+                  { label: "Daily XP", value: `${dailyXP}/150`, icon: "📊" },
                 ].map((stat) => (
-                  <div
-                    key={stat.label}
-                    className="rounded-2xl p-3 text-center"
-                    style={{ background: "white", border: "1px solid #f0f0f0" }}
-                  >
+                  <div key={stat.label} className="rounded-2xl p-3 text-center" style={{ background: "white", border: "1px solid #f0f0f0" }}>
                     <div className="text-lg mb-1">{stat.icon}</div>
                     <div className="text-lg font-bold text-gray-900">{stat.value}</div>
                     <div className="text-xs text-gray-400">{stat.label}</div>
@@ -922,22 +911,16 @@ export default function MindOSPage() {
                 ))}
               </div>
 
-              {/* Weekly brain report */}
               <div className="rounded-2xl p-4" style={{ background: "#1a1a2e", color: "white" }}>
                 <div className="text-xs font-semibold text-purple-300 mb-2">AI Brain Report — Week 1</div>
                 <div className="text-sm leading-relaxed text-gray-300">
                   You spent most time in <strong className="text-white">alpha</strong> state this week.
                   Your theta sessions are getting longer — a sign your mind is opening.
-                  Next goal: achieve one <strong className="text-white">30-minute theta session</strong> to
-                  unlock the Aware badge.
+                  Next goal: achieve one <strong className="text-white">30-minute theta session</strong> to unlock the Aware badge.
                 </div>
                 <div className="mt-3 flex gap-2">
-                  <div className="px-3 py-1 rounded-full text-xs font-semibold" style={{ background: "#2D6A4F" }}>
-                    Alpha explorer 🌿
-                  </div>
-                  <div className="px-3 py-1 rounded-full text-xs font-semibold" style={{ background: "#2d1b69" }}>
-                    7-day warrior 🔥
-                  </div>
+                  <div className="px-3 py-1 rounded-full text-xs font-semibold" style={{ background: "#2D6A4F" }}>Alpha explorer 🌿</div>
+                  <div className="px-3 py-1 rounded-full text-xs font-semibold" style={{ background: "#2d1b69" }}>7-day warrior 🔥</div>
                 </div>
               </div>
             </motion.div>
@@ -946,11 +929,8 @@ export default function MindOSPage() {
         </AnimatePresence>
       </div>
 
-      {/* Bottom nav hint */}
       <div className="fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-gray-100 flex items-center justify-center">
-        <div className="text-xs text-gray-400">
-          MindOS · part of ORAII patient portal
-        </div>
+        <div className="text-xs text-gray-400">MindOS · part of ORAII patient portal</div>
       </div>
     </div>
   );

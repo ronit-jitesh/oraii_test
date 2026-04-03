@@ -9,9 +9,6 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
 
   // ── EXTERNAL PACKAGES ──────────────────────────────────────────────────
   // Prevent bundling server-only packages into the client chunk

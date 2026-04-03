@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
     const response = NextResponse.next({
         request: {
             headers: request.headers,
@@ -44,10 +44,6 @@ export async function middleware(request: NextRequest) {
 
     const isProtectedPath = isDoctorPath || isPatientPath;
 
-    // Auth/public routes
-    const publicPaths = ['/', '/doctor/login', '/patient/login', '/login', '/signup', '/auth/callback'];
-    const isPublicPath = publicPaths.includes(pathname);
-
     // Redirect unauthenticated users away from protected routes
     if (isProtectedPath && !user) {
         return NextResponse.redirect(new URL('/', request.url));
@@ -58,7 +54,6 @@ export async function middleware(request: NextRequest) {
         const role = user.user_metadata?.role;
 
         // Only redirect authenticated users away from the ROOT landing page to their dashboard
-        // Login pages should remain accessible (for re-login or account switching)
         const authPages = ['/', '/doctor/login', '/patient/login', '/login'];
         if (authPages.includes(pathname)) {
             if (role === 'doctor') return NextResponse.redirect(new URL('/doctor/dashboard', request.url));
@@ -66,13 +61,12 @@ export async function middleware(request: NextRequest) {
             return response;
         }
 
-
-        // Enforce doctor-only access (only if user has a role assigned)
+        // Enforce doctor-only access
         if (isDoctorPath && role && role !== 'doctor') {
             return NextResponse.redirect(new URL('/patient/dashboard', request.url));
         }
 
-        // Enforce patient-only access (only if user has a role assigned)
+        // Enforce patient-only access
         if (isPatientPath && role && role !== 'patient') {
             return NextResponse.redirect(new URL('/doctor/dashboard', request.url));
         }

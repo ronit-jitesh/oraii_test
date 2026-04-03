@@ -1,8 +1,7 @@
-﻿'use client';
+'use client';
 
 import { useState, Suspense } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { UserPlus, Mail, Lock, CheckCircle, ShieldCheck, Stethoscope, Loader2 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
@@ -19,7 +18,6 @@ const C = {
     textMuted: '#9CA3AF',
     danger: '#C0392B',
     dangerLight: '#FEF2F2',
-    accent: '#52B788',
 };
 
 function SignupForm() {
@@ -33,7 +31,6 @@ function SignupForm() {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
     const [loading, setLoading] = useState(false);
-    const router = useRouter();
     const supabase = createClient();
 
     const handleSignup = async (e: React.FormEvent) => {
@@ -57,7 +54,7 @@ function SignupForm() {
 
         setLoading(true);
 
-        const { error } = await supabase.auth.signUp({
+        const { error: signUpError } = await supabase.auth.signUp({
             email,
             password,
             options: {
@@ -69,8 +66,8 @@ function SignupForm() {
             }
         });
 
-        if (error) {
-            setError((error instanceof Error ? error.message : String(error)));
+        if (signUpError) {
+            setError(signUpError.message);
             setLoading(false);
         } else {
             setSuccess(true);
@@ -114,7 +111,6 @@ function SignupForm() {
                     className="p-8"
                     style={{ background: C.card, borderRadius: 12, border: `1px solid ${C.border}`, boxShadow: '0 2px 12px rgba(45,106,79,0.08)' }}
                 >
-                    {/* Logo */}
                     <div className="text-center mb-8">
                         <img
                             src="/logo.png"
@@ -128,7 +124,6 @@ function SignupForm() {
                         <p className="text-sm mt-1" style={{ color: C.textMuted }}>Join ORAII</p>
                     </div>
 
-                    {/* Form */}
                     <form onSubmit={handleSignup} className="space-y-4">
                         <div>
                             <label className="block text-[11px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: C.textSecondary }}>Email</label>
@@ -177,8 +172,8 @@ function SignupForm() {
 
                         {roleFromQuery === 'doctor' && (
                             <div>
-                                <label className="block text-[11px] font-semibold uppercase tracking-wider mb-1.5 flex items-center gap-2" style={{ color: C.textSecondary }}>
-                                    <ShieldCheck size={12} style={{ color: C.primary }} />
+                                <label className="block text-[11px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: C.textSecondary }}>
+                                    <ShieldCheck size={12} style={{ color: C.primary, display: 'inline', marginRight: 4 }} />
                                     NPI Number (10 digits)
                                 </label>
                                 <div className="relative">
@@ -218,7 +213,6 @@ function SignupForm() {
                         </button>
                     </form>
 
-                    {/* Login Link */}
                     <p className="text-center mt-6 text-sm" style={{ color: C.textMuted }}>
                         Already have an account?{' '}
                         <Link href="/" className="font-semibold" style={{ color: C.primary }}>

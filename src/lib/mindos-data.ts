@@ -15,7 +15,7 @@
 
 import { createClient } from "@/lib/supabase/client";
 
-const supabase = createClient();
+
 
 // ── HELPERS ───────────────────────────────────────────────────────────────
 
@@ -302,6 +302,7 @@ export async function saveJournalEntry({
 
   // ── Step 2: Supabase (async, non-blocking, needs auth) ──
   try {
+    const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       const { error } = await supabase.from("mindos_journal").insert({
@@ -326,6 +327,7 @@ export async function saveJournalEntry({
 export async function loadJournalEntries(limit = 20): Promise<JournalEntry[]> {
   // Try Supabase first if authenticated
   try {
+    const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       const { data, error } = await supabase
@@ -393,6 +395,7 @@ export async function saveSession({
   } catch {}
 
   try {
+    const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       await supabase.from("mindos_sessions").insert({ user_id: user.id, ...record });
@@ -426,6 +429,7 @@ export async function loadProgress(): Promise<MindOSProgress> {
 
   // Try Supabase if authenticated
   try {
+    const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       const { data, error } = await supabase
@@ -508,6 +512,7 @@ export async function addXP(amount: number): Promise<MindOSProgress & { added: n
 
   // Try Supabase async (non-blocking)
   try {
+    const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       await supabase.from("mindos_progress").upsert({

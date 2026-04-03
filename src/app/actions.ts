@@ -14,9 +14,7 @@ import { sanitizeForStorage, PrivacyTier } from '@/lib/ephemeralProcessor';
 import type { InstrumentType } from '@/lib/assessmentInstruments';
 import { runHFRiskValidation } from '@/lib/hfClassifiers';
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+
 
 // Zod Schema for Structured Output (Strict JSON Mode)
 const EntitySchema = z.object({
@@ -131,6 +129,7 @@ export async function generateClinicalNote(transcript: string, format: NoteForma
     }
 
     try {
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
         const systemPrompt = composePrompt(format, modality);
         // Strategic Analysis: Use GPT-4o Mini for note generation
         const modelSpec = getModelForTask('noteGeneration');
@@ -244,6 +243,7 @@ export async function generateRiskAssessment(transcript: string) {
     }
 
     try {
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
         const modelSpec = getModelForTask('riskDetection');
 
         const completion = await openai.chat.completions.create({

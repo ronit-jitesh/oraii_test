@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import OpenAI from 'openai';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
 
 // =============================================
 // Patient Profile
@@ -449,6 +449,7 @@ export async function translateNoteToPlainLanguage(clinicalNote: string) {
             };
         }
 
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
         const response = await openai.chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [

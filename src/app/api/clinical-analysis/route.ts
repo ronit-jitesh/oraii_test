@@ -5,7 +5,7 @@ import { CLINICAL_ANALYSIS_SYSTEM_PROMPT } from '@/lib/clinicalAnalysisEngine';
 import { detectTobaccoUse, getTobaccoOverlayForAnalysis } from '@/lib/substanceUseEngine';
 import { detectCulturalIdioms } from '@/lib/hinglishTaxonomy';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
 
 // Instrument recommendation logic — based on what scores exist and what's missing
 function getRecommendedInstruments(
@@ -51,6 +51,7 @@ function getRecommendedInstruments(
 
 export async function POST(request: NextRequest) {
     try {
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
